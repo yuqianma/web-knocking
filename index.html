@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>Web Knocking</title>
+  <style>
+    html {
+      height: 100%;
+      font-family: sans-serif;
+    }
+    body {
+      box-sizing: border-box;
+      height: 100%;
+      max-width: 600px;
+      padding: 1rem;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    #title {
+      font-size: 1.2rem;
+      font-weight: bolder;
+      color: #666;
+      text-align: center;
+      margin: 2rem 0;
+    }
+    #status {
+      text-align: center;
+      color: #aaa;
+      margin: 1rem 0;
+    }
+    #status::after {
+      display: block;
+      padding: 0.5rem;
+      content: "...";
+    }
+    #status.knocking::after {
+      font-weight: bolder;
+      content: "Knocking";
+      color: #0bd;
+    }
+    #status.knocked::after {
+      font-weight: bolder;
+      content: "Knocked";
+      color: #0bd;
+    }
+    #status.no::after {
+      font-weight: bolder;
+      content: "No";
+      color: #e55;
+    }
+    #status.yes::after {
+      font-weight: bolder;
+      content: "Yes";
+      color: #0b9;
+    }
+    form {
+      width: 80%;
+    }
+    #password {
+      box-sizing: border-box;
+      width: 100%;
+      font-size: 1.5rem;
+      padding: 0.5rem;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      margin: 2rem 0;
+    }
+    #password:focus {
+      outline: none;
+      border: 1px solid #0b9;
+    }
+    form:invalid #password {
+      border-color: #e55;
+    }
+    button {
+      box-sizing: border-box;
+      width: 100%;
+      font-size: 1rem;
+      height: 2.875rem;
+      padding: 0.5rem;
+      margin: 1rem 0;
+      border: 1px solid #00ad8e;
+      color: #fff;
+      background: #0b9;
+      border-radius: 5px;
+      user-select: none;
+    }
+    button:focus {
+      outline: none;
+    }
+    button:active {
+      background: #019479;
+    }
+  </style>
+</head>
+<body>
+  <div id="title">Web Knocking</div>
+  <div id="status">Opened ?</div>
+  <form>
+    <input
+      id="password"
+      type="password"
+      name="password"
+      placeholder="1111.3333.2222"
+      pattern="[0-9.]+"
+      required
+    />
+    <button>Open</button>
+  </form >
+</body>
+<script>
+  const config = (() => {
+    const config = Object.fromEntries(new URLSearchParams(location.search));
+    config.interval = +config.interval;
+    if (!(config.interval > 0)) {
+      config.interval = 0;
+    }
+    return config;
+  })();
+
+  console.log(config);
+
+  const STORAGE_KEY = 'web-knocking:password';
+
+  async function knock(hostname, interval = 0, password) {
+    if (!password) return;
+    
+    let ports = password.split('.');
+
+    return new Promise(async (resolve, reject) => {
+      let count = ports.length;
+      for (let i = 0; i < ports.length; ++i) {
+
+        i !== 0 && await new Promise(res => setTimeout(res, interval));
+
+        const port = ports[i];
+        
+        fetch(`${location.protocol}//${hostname}:${port}`)
+        .finally(() => {
+          // it always throws error due to closed port
+          if (--count === 0) {
+            resolve();
+          }
+        });
+      }
+    });
+  }
+
+  async function detectStatus(hostname, webport) {
+    return new Promise((resolve, reject) => {
+      let count = 2;
+      function failed() {
+        if (--count === 0) {
+          resolve(false);
+        }
+      }
+      fetch(`http://${hostname}:${webport}`, { mode: 'no-cors' })
+      .then(res => resolve(true), rej => failed());
+
+      fetch(`https://${hostname}:${webport}`, { mode: 'no-cors' })
+      .then(res => resolve(true), rej => failed());
+    });
+  }
+
+  function main({ hostname, webport, interval }) {
+    const $ = document.querySelector.bind(document);
+    const infStatus = $('#status');
+    const iptPassword = $('#password');
+    const form = $('form');
+
+    iptPassword.value = localStorage.getItem(STORAGE_KEY);
+
+    iptPassword.addEventListener('focus', (e) => iptPassword.type = 'text');
+    iptPassword.addEventListener('blur', (e) => iptPassword.type = 'password');
+
+    const state = new class{
+      constructor() {
+        this._knocking = false;
+        this._open = false;
+      }
+      get knocking() { return this._knocking; }
+      set knocking(v) {
+        infStatus.className = v ? 'knocking' : 'knocked';
+      }
+
+      get open() { return this._open; }
+      set open(v) {
+        infStatus.className = v ? 'yes' : 'no';
+      }
+    };
+
+    if (webport) {
+      detectStatus(hostname, webport).then(
+        (result) => state.open = result
+      );
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      if (state.knocking) {
+        return;
+      }
+
+      const password = iptPassword.value;
+
+      state.knocking = true;
+      await knock(hostname, interval, iptPassword.value);
+      state.knocking = false;
+
+      if (webport) {
+        if (await detectStatus(hostname, webport)) {
+          state.open = true;
+          localStorage.setItem(STORAGE_KEY, password);
+        } else {
+          state.open = false;
+        }
+      }
+      
+    });
+  }
+
+  main(config);
+</script>
+</html>
