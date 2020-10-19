@@ -35,7 +35,8 @@ iptables -t nat -A knocking -p tcp -m set --match-set banned src -j LOG --log-pr
 iptables -t nat -A knocking -p tcp -m set --match-set banned src -j RETURN
 
 # Add retried ip to `banned` set
-iptables -t nat -A knocking -p tcp --dport $PORT1 -m set --match-set gate1 src -j SET --add-set banned src --exist
+# TODO: the browser resends packages in one fetch ?
+#iptables -t nat -A knocking -p tcp --dport $PORT1 -m set --match-set gate1 src -j SET --add-set banned src --exist
 iptables -t nat -A knocking -p tcp --dport $PORT1 -m set --match-set gate1 src -j LOG --log-prefix "[retry]"
 iptables -t nat -A knocking -p tcp --dport $PORT1 -m set --match-set gate1 src -j RETURN
 
